@@ -141,6 +141,13 @@ const DEFAULT_MESSAGES = [
 
 const TRACKS = [
   { title: "雨下一整晚", subtitle: "周杰伦 · 跨时代", src: "./assets/audio/rain-all-night.flac", duration: 0 },
+  { title: "手语", subtitle: "周杰伦", src: "./assets/audio/jay-sign-language.ogg", duration: 0 },
+  { title: "知了", subtitle: "陈默之", src: "./assets/audio/cicada.ogg", duration: 0 },
+  { title: "会呼吸的痛", subtitle: "梁静茹", src: "./assets/audio/breathing-pain.ogg", duration: 0 },
+  { title: "想自由", subtitle: "林宥嘉", src: "./assets/audio/want-freedom.ogg", duration: 0 },
+  { title: "阴天", subtitle: "莫文蔚", src: "./assets/audio/cloudy-day.ogg", duration: 0 },
+  { title: "一样的月光", subtitle: "徐佳莹", src: "./assets/audio/same-moonlight.ogg", duration: 0 },
+  { title: "手写的从前", subtitle: "周杰伦", src: "./assets/audio/handwritten-past.ogg", duration: 0 },
 ];
 
 const state = {
@@ -240,12 +247,12 @@ function playerPanel() {
   const track = TRACKS[state.trackIndex];
   return `
     <section class="panel player-panel${state.playing ? " is-playing" : ""}" data-player-panel>
-      <div class="player-top"><span class="panel-label">listening deck</span><span class="player-live"><i></i>LOSSLESS</span></div>
+      <div class="player-top"><span class="panel-label">listening deck</span><span class="player-live"><i></i>HI-FI</span></div>
       <div class="vinyl-stage" aria-hidden="true">
         <div class="platter"><div class="vinyl"><div class="record-label"><span>RAINY.</span><b>R</b></div></div></div>
         <div class="tonearm-base"></div><div class="tonearm"><i></i></div><div class="deck-led"></div>
       </div>
-      <div class="track-copy"><small>now playing</small><strong data-track-title>${track.title}</strong><span data-track-subtitle>${track.subtitle}</span></div>
+      <div class="track-copy"><small>now playing · <b data-track-position>${String(state.trackIndex + 1).padStart(2, "0")} / ${String(TRACKS.length).padStart(2, "0")}</b></small><strong data-track-title>${track.title}</strong><span data-track-subtitle>${track.subtitle}</span></div>
       <div class="player-progress" data-player-seek role="slider" tabindex="0" aria-label="播放进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i data-player-progress></i></div>
       <div class="player-time"><span data-player-current>00:00</span><span data-player-duration>${formatTime(track.duration)}</span></div>
       <div class="player-controls">
@@ -1024,6 +1031,7 @@ function updatePlayerUi() {
   });
   document.querySelectorAll("[data-track-title]").forEach((node) => { node.textContent = track.title; });
   document.querySelectorAll("[data-track-subtitle]").forEach((node) => { node.textContent = track.subtitle; });
+  document.querySelectorAll("[data-track-position]").forEach((node) => { node.textContent = `${String(state.trackIndex + 1).padStart(2, "0")} / ${String(TRACKS.length).padStart(2, "0")}`; });
   document.querySelectorAll("[data-player-current]").forEach((node) => { node.textContent = formatTime(elapsed); });
   document.querySelectorAll("[data-player-duration]").forEach((node) => { node.textContent = formatTime(duration); });
   const progress = duration ? Math.min(100, (elapsed / duration) * 100) : 0;
