@@ -171,6 +171,7 @@ const state = {
 const weatherDynamics = { wind: 0, intensity: 1 };
 let animatedRoute = "";
 let homeScrollCleanup = null;
+let homeEntered = false;
 
 const app = document.querySelector("#main-content");
 const searchDialog = document.querySelector("[data-search-dialog]");
@@ -856,50 +857,73 @@ function initHomeScrollStory() {
   const copy = document.querySelector("[data-overture-copy]");
   const journal = document.querySelector("[data-home-journal]");
   const scrollButton = document.querySelector("[data-home-scroll]");
-  if (!overture || !copy || !journal || !scrollButton) return;
+  if (!overture || !copy || !journal || !scrollButton) {
+    app.classList.remove("home-entered");
+    return;
+  }
 
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const revealOverture = () => overture.classList.add("is-ready");
-  const intro = document.querySelector("[data-rainy-intro]");
-  if (intro && !intro.classList.contains("is-leaving")) addEventListener("rainy:intro-complete", revealOverture, { once: true });
-  else requestAnimationFrame(revealOverture);
-
   const revealJournal = () => journal.classList.add("is-visible");
-  let observer = null;
-  if (reducedMotion) {
-    revealOverture();
+  let touchStartY = 0;
+  let transitionTimer = 0;
+  let entering = false;
+
+  const removeEntryListeners = () => {
+    removeEventListener("wheel", onWheel);
+    removeEventListener("scroll", onScroll);
+    removeEventListener("touchstart", onTouchStart);
+    removeEventListener("touchmove", onTouchMove);
+    removeEventListener("keydown", onKeyDown);
+    scrollButton.removeEventListener("click", enterHome);
+  };
+
+  const finishEntry = () => {
+    app.classList.add("home-entered");
+    document.body.classList.remove("home-transitioning");
+    scrollTo({ top: 0, behavior: "auto" });
+  };
+
+  function enterHome() {
+    if (entering || !overture.classList.contains("is-ready")) return;
+    entering = true;
+    homeEntered = true;
+    removeEntryListeners();
     revealJournal();
-  } else {
-    observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        revealJournal();
-        observer.disconnect();
-      }
-    }, { threshold: .04, rootMargin: "0px 0px -4%" });
-    observer.observe(journal);
+    overture.classList.add("is-exiting");
+    document.body.classList.add("home-transitioning");
+    if (reducedMotion) finishEntry();
+    else transitionTimer = setTimeout(finishEntry, 720);
   }
 
-  const updateOverture = () => {
-    if (!overture.classList.contains("is-ready")) return;
-    const progress = Math.max(0, Math.min(1, scrollY / Math.max(1, overture.offsetHeight * .3)));
-    copy.style.opacity = String(1 - progress);
-    copy.style.filter = `blur(${(progress * 11).toFixed(1)}px)`;
-  };
+  function onWheel(event) { if (event.deltaY > 6) enterHome(); }
+  function onScroll() { if (scrollY > 4) enterHome(); }
+  function onTouchStart(event) { touchStartY = event.touches[0]?.clientY || 0; }
+  function onTouchMove(event) { if (touchStartY - (event.touches[0]?.clientY || touchStartY) > 10) enterHome(); }
+  function onKeyDown(event) { if (["ArrowDown", "PageDown", "End", " "].includes(event.key)) enterHome(); }
 
-  const scrollToJournal = () => {
-    const portal = journal.querySelector(".home-portal");
-    const headerHeight = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--header")) || 72;
-    const target = scrollY + (portal?.getBoundingClientRect().top || journal.getBoundingClientRect().top) - headerHeight - 14;
-    scrollTo({ top: Math.max(0, target), behavior: reducedMotion ? "auto" : "smooth" });
-  };
-  scrollButton.addEventListener("click", scrollToJournal);
-  if (!reducedMotion) addEventListener("scroll", updateOverture, { passive: true });
+  if (homeEntered) {
+    revealJournal();
+    overture.classList.add("is-exiting");
+    app.classList.add("home-entered");
+  } else {
+    app.classList.remove("home-entered");
+    const intro = document.querySelector("[data-rainy-intro]");
+    if (intro && !intro.classList.contains("is-leaving")) addEventListener("rainy:intro-complete", revealOverture, { once: true });
+    else requestAnimationFrame(revealOverture);
+    addEventListener("wheel", onWheel, { passive: true });
+    addEventListener("scroll", onScroll, { passive: true });
+    addEventListener("touchstart", onTouchStart, { passive: true });
+    addEventListener("touchmove", onTouchMove, { passive: true });
+    addEventListener("keydown", onKeyDown);
+    scrollButton.addEventListener("click", enterHome);
+  }
 
   homeScrollCleanup = () => {
+    clearTimeout(transitionTimer);
     removeEventListener("rainy:intro-complete", revealOverture);
-    removeEventListener("scroll", updateOverture);
-    scrollButton.removeEventListener("click", scrollToJournal);
-    observer?.disconnect();
+    removeEntryListeners();
+    document.body.classList.remove("home-transitioning");
   };
 }
 
