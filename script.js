@@ -170,6 +170,7 @@ const state = {
 
 const weatherDynamics = { wind: 0, intensity: 1 };
 let animatedRoute = "";
+let homeScrollCleanup = null;
 
 const app = document.querySelector("#main-content");
 const searchDialog = document.querySelector("[data-search-dialog]");
@@ -290,9 +291,26 @@ function rightStack() {
 function homeTemplate() {
   const [lead, ...rest] = POSTS;
   return `
-    ${heroTemplate("personal notes · 2026", SITE.name, "某只会用vibe coding进行taken浪费行为的愚蠢少年——")}
-    <div class="portal">
-      ${leftStack()}
+    <section class="hero home-overture" data-home-overture>
+      <div class="home-overture-inner">
+        <div class="home-identity">
+          <p class="hero-topline">personal notes · 2026</p>
+          <h1>${SITE.name}</h1>
+          <p class="hero-summary">某只会用vibe coding进行taken浪费行为的愚蠢少年——</p>
+          <div class="hero-weather"><i></i><span data-hero-clock>雨 · 雾蓝清晨 · 中国 UTC+8</span></div>
+        </div>
+        <blockquote class="home-overture-quote" data-overture-copy>
+          <span>天外有天无尽处，</span>
+          <span>守心尽己自生光。</span>
+        </blockquote>
+      </div>
+      <button class="home-scroll-cue" type="button" data-home-scroll>
+        <span>向下阅读</span><i aria-hidden="true"></i>
+      </button>
+    </section>
+    <section class="home-journal" id="home-journal" data-home-journal>
+      <div class="portal home-portal">
+      <aside class="left-stack">${profilePanel()}${sideNav()}</aside>
       <div class="main-stack">
         <section class="main-panel welcome-panel">
           <p class="welcome-eyebrow">写给偶然到访的人</p>
@@ -313,7 +331,8 @@ function homeTemplate() {
         </section>
       </div>
       ${rightStack()}
-    </div>`;
+      </div>
+    </section>`;
 }
 
 function pageTitle(eyebrow, title, copy) {
@@ -829,6 +848,56 @@ function notFoundTemplate() {
   return `<div class="not-found"><span>404 / LOST IN THE RAIN</span><h1>这页被雨冲走了</h1><p>链接可能已经改变，或者内容还没有发布。</p><a href="#/">返回首页</a></div>`;
 }
 
+function initHomeScrollStory() {
+  if (homeScrollCleanup) homeScrollCleanup();
+  homeScrollCleanup = null;
+
+  const overture = document.querySelector("[data-home-overture]");
+  const copy = document.querySelector("[data-overture-copy]");
+  const journal = document.querySelector("[data-home-journal]");
+  const scrollButton = document.querySelector("[data-home-scroll]");
+  if (!overture || !copy || !journal || !scrollButton) return;
+
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const revealOverture = () => overture.classList.add("is-ready");
+  const intro = document.querySelector("[data-rainy-intro]");
+  if (intro && !intro.classList.contains("is-leaving")) addEventListener("rainy:intro-complete", revealOverture, { once: true });
+  else requestAnimationFrame(revealOverture);
+
+  const revealJournal = () => journal.classList.add("is-visible");
+  let observer = null;
+  if (reducedMotion) {
+    revealOverture();
+    revealJournal();
+  } else {
+    observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        revealJournal();
+        observer.disconnect();
+      }
+    }, { threshold: .04, rootMargin: "0px 0px -4%" });
+    observer.observe(journal);
+  }
+
+  const updateOverture = () => {
+    if (!overture.classList.contains("is-ready")) return;
+    const progress = Math.max(0, Math.min(1, scrollY / Math.max(1, overture.offsetHeight * .78)));
+    copy.style.opacity = String(1 - progress);
+    copy.style.transform = `translate3d(0, ${Math.round(progress * -64)}px, 0)`;
+  };
+
+  const scrollToJournal = () => journal.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+  scrollButton.addEventListener("click", scrollToJournal);
+  if (!reducedMotion) addEventListener("scroll", updateOverture, { passive: true });
+
+  homeScrollCleanup = () => {
+    removeEventListener("rainy:intro-complete", revealOverture);
+    removeEventListener("scroll", updateOverture);
+    scrollButton.removeEventListener("click", scrollToJournal);
+    observer?.disconnect();
+  };
+}
+
 function getRoute() {
   const raw = location.hash;
   return raw && raw.startsWith("#/") ? raw.slice(1).split("?")[0] : "/";
@@ -877,6 +946,7 @@ function render() {
 }
 
 function bindPageEvents() {
+  initHomeScrollStory();
   bindAdminEvents();
   document.querySelectorAll("[data-filter]").forEach((button) => button.addEventListener("click", () => {
     state.tag = button.dataset.filter;
@@ -1358,6 +1428,7 @@ let entranceAnimation = null;
 
 function animateIn() {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (document.querySelector("[data-home-overture]")) return;
   if (window.gsap) {
     if (entranceAnimation) entranceAnimation.kill();
     const heroTopline = document.querySelector(".hero-topline");
@@ -1522,6 +1593,7 @@ function initParticleIntro() {
     setTimeout(() => {
       cancelAnimationFrame(animationFrame);
       intro.remove();
+      dispatchEvent(new CustomEvent("rainy:intro-complete"));
     }, 900);
   };
 
