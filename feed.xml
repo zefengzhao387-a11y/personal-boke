@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+  <channel>
+    <title>Rainy. — 泽.的个人博客</title>
+    <link>https://example.com/</link>
+    <description>在雨声里，记录技术、设计与普通生活。</description>
+    <language>zh-CN</language>
+    <lastBuildDate>Sat, 08 Aug 2026 08:00:00 GMT</lastBuildDate>
+    <item>
+      <title>我为什么重新开始写博客</title>
+      <link>https://example.com/#/post/begin-again</link>
+      <guid>https://example.com/#/post/begin-again</guid>
+      <pubDate>Sat, 08 Aug 2026 08:00:00 GMT</pubDate>
+      <description>社交媒体越来越快，我却想重新拥有一块允许想法慢慢长大的地方。</description>
+    </item>
+    <item>
+      <title>把复杂生活装进一个简单系统</title>
+      <link>https://example.com/#/post/a-simple-system-for-life</link>
+      <guid>https://example.com/#/post/a-simple-system-for-life</guid>
+      <pubDate>Mon, 27 Jul 2026 08:00:00 GMT</pubDate>
+      <description>好的系统不要求你成为更自律的人，它只在你分心时，替你记住下一步。</description>
+    </item>
+    <item>
+      <title>设计不是把东西变漂亮</title>
+      <link>https://example.com/#/post/design-is-a-decision</link>
+      <guid>https://example.com/#/post/design-is-a-decision</guid>
+      <pubDate>Sun, 12 Jul 2026 08:00:00 GMT</pubDate>
+      <description>每一个看得见的界面背后，都藏着一组关于什么更重要的判断。</description>
+    </item>
+    <item>
+      <title>和 AI 一起工作之后，我保留了什么</title>
+      <link>https://example.com/#/post/working-with-ai</link>
+      <guid>https://example.com/#/post/working-with-ai</guid>
+      <pubDate>Wed, 24 Jun 2026 08:00:00 GMT</pubDate>
+      <description>工具会改变工作速度，却不能替人决定什么值得做、做到什么程度。</description>
+    </item>
+    <item>
+      <title>慢一点，也是一种速度</title>
+      <link>https://example.com/#/post/another-kind-of-speed</link>
+      <guid>https://example.com/#/post/another-kind-of-speed</guid>
+      <pubDate>Sun, 31 May 2026 08:00:00 GMT</pubDate>
+      <description>有些事情不能通过压缩时间完成，它们只能在时间里发生。</description>
+    </item>
+  </channel>
+</rss>
