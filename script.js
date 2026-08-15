@@ -166,6 +166,10 @@ const state = {
   adminSelectedSlug: "",
   adminLoaded: false,
   adminLoading: false,
+  guestMessages: [],
+  guestMessagesLoaded: false,
+  guestMessagesLoading: false,
+  guestMessagesRemote: false,
 };
 
 const weatherDynamics = { wind: 0, intensity: 1 };
@@ -385,30 +389,73 @@ function notesTemplate(selectedId = "") {
 }
 
 function getMessages() {
+  if (state.guestMessagesRemote) return state.guestMessages;
   try {
     const saved = JSON.parse(localStorage.getItem("quiet-window-messages") || "[]");
     return Array.isArray(saved) ? [...saved, ...DEFAULT_MESSAGES] : DEFAULT_MESSAGES;
   } catch { return DEFAULT_MESSAGES; }
 }
 
+function formatGuestDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "刚刚" : date.toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" });
+}
+
+function normalizeGuestMessage(message) {
+  return {
+    id: message.id || "",
+    name: String(message.name || "访客"),
+    text: String(message.message || message.text || ""),
+    date: message.created_at ? formatGuestDate(message.created_at) : String(message.date || "刚刚"),
+  };
+}
+
 function messagesTemplate() {
   const messages = getMessages();
+  if (!messages.length) return `<div class="guest-empty">雨声还很安静，来留下第一句话吧。</div>`;
   return messages.map((message) => `
     <article class="guest-message"><div class="guest-avatar" aria-hidden="true">${escapeHtml(message.name.slice(0, 1))}</div><div><div class="guest-message-head"><strong>${escapeHtml(message.name)}</strong><time>${escapeHtml(message.date)}</time></div><p>${escapeHtml(message.text)}</p></div></article>`).join("");
 }
 
+function updateGuestMessageView() {
+  const list = document.querySelector("[data-message-list]");
+  const count = document.querySelector("[data-message-count]");
+  if (list) list.innerHTML = messagesTemplate();
+  if (count) count.textContent = `${getMessages().length} 条`;
+}
+
+async function loadGuestMessages() {
+  if (!window.RainyDB?.isConfigured() || !window.RainyDB.listGuestMessages || state.guestMessagesLoading) return;
+  state.guestMessagesLoading = true;
+  try {
+    const messages = await window.RainyDB.listGuestMessages();
+    state.guestMessages = messages.map(normalizeGuestMessage);
+    state.guestMessagesRemote = true;
+    state.guestMessagesLoaded = true;
+    updateGuestMessageView();
+  } catch (error) {
+    state.guestMessagesRemote = false;
+    console.warn("Rainy. 暂时无法读取公共留言。", error);
+    if (getRoute() === "/guestbook") showToast("公共留言暂时无法读取，正在显示本机内容");
+  } finally {
+    state.guestMessagesLoading = false;
+  }
+}
+
 function guestbookTemplate() {
   const count = getMessages().length;
+  const remoteReady = window.RainyDB?.isConfigured();
   return `
     ${heroTemplate("leave a trace · guestbook", "留言", "如果恰好路过，可以把一句话留在这里。雨停之后，我仍然会看见。")}
     <div class="subpage-grid">${leftStack()}
       <section class="main-panel page-panel">
         ${pageTitle("guestbook", "来访者手记", "不必写得完整。一个问候、一点建议，或者今天路过时的心情都可以。")} 
-        <div class="guest-intro">你的留言只会保存在当前浏览器里。这是一个可直接打开的静态博客示例，接入数据库后即可变成真正的公共留言板。</div>
+        <div class="guest-intro">${remoteReady ? "留言会保存到云端，并在这里与所有来访者共享；邮箱只用于联系，不会公开展示。" : "数据库尚未配置，留言目前只会保存在当前浏览器。"}</div>
         <form class="guest-form" data-guest-form novalidate>
           <div class="form-row"><label>你的称呼<input name="name" maxlength="16" required placeholder="怎么称呼你" /></label><label>邮箱（不会展示）<input name="email" type="email" placeholder="可不填" /></label></div>
+          <label class="guest-honeypot" aria-hidden="true">网站<input name="website" tabindex="-1" autocomplete="off" /></label>
           <label>想说的话<textarea name="message" maxlength="240" required placeholder="写下一点什么……"></textarea></label>
-          <div class="form-bottom"><small>最多 240 字 · 发布后保存在本机</small><button class="submit-button" type="submit">留下这句话</button></div>
+          <div class="form-bottom"><small>最多 240 字 · ${remoteReady ? "发布后所有访客可见" : "发布后保存在本机"}</small><button class="submit-button" type="submit">留下这句话</button></div>
         </form>
         <div class="guest-list-head"><h3>窗边的字迹</h3><span data-message-count>${count} 条</span></div>
         <div data-message-list>${messagesTemplate()}</div>
@@ -849,6 +896,105 @@ function notFoundTemplate() {
   return `<div class="not-found"><span>404 / LOST IN THE RAIN</span><h1>这页被雨冲走了</h1><p>链接可能已经改变，或者内容还没有发布。</p><a href="#/">返回首页</a></div>`;
 }
 
+function burstOvertureCopy(copy) {
+  if (!copy || matchMedia("(prefers-reduced-motion: reduce)").matches) return () => {};
+
+  const bounds = copy.getBoundingClientRect();
+  if (!bounds.width || !bounds.height) return () => {};
+
+  const sample = document.createElement("canvas");
+  sample.width = Math.ceil(bounds.width);
+  sample.height = Math.ceil(bounds.height);
+  const sampleContext = sample.getContext("2d", { willReadFrequently: true });
+  if (!sampleContext) return () => {};
+
+  sampleContext.textBaseline = "top";
+  copy.querySelectorAll("span").forEach((line) => {
+    const lineBounds = line.getBoundingClientRect();
+    const style = getComputedStyle(line);
+    sampleContext.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    sampleContext.letterSpacing = style.letterSpacing;
+    sampleContext.fillStyle = style.color;
+    sampleContext.fillText(line.textContent, lineBounds.left - bounds.left, lineBounds.top - bounds.top);
+  });
+
+  const pixels = sampleContext.getImageData(0, 0, sample.width, sample.height).data;
+  const step = innerWidth < 700 ? 5 : 4;
+  const points = [];
+  for (let y = 0; y < sample.height; y += step) {
+    for (let x = 0; x < sample.width; x += step) {
+      const alpha = pixels[(y * sample.width + x) * 4 + 3];
+      if (alpha > 72) points.push({ x, y, alpha: alpha / 255 });
+    }
+  }
+
+  const keepEvery = Math.max(1, Math.ceil(points.length / 1500));
+  const particles = points.filter((_, index) => index % keepEvery === 0).map((point) => {
+    const dx = point.x - bounds.width * .5;
+    const dy = point.y - bounds.height * .5;
+    const distance = Math.hypot(dx, dy) || 1;
+    const speed = 58 + Math.random() * 142;
+    return {
+      ...point,
+      vx: dx / distance * speed + (Math.random() - .5) * 78,
+      vy: dy / distance * speed + (Math.random() - .5) * 68 - 18,
+      size: .7 + Math.random() * 1.35,
+      delay: Math.random() * 90
+    };
+  });
+
+  const canvas = document.createElement("canvas");
+  const pixelRatio = Math.min(devicePixelRatio || 1, 2);
+  const burstPadding = 180;
+  const canvasWidth = bounds.width + burstPadding * 2;
+  const canvasHeight = bounds.height + burstPadding * 2;
+  canvas.className = "overture-particle-burst";
+  canvas.width = Math.ceil(canvasWidth * pixelRatio);
+  canvas.height = Math.ceil(canvasHeight * pixelRatio);
+  canvas.style.left = `${bounds.left - burstPadding}px`;
+  canvas.style.top = `${bounds.top - burstPadding}px`;
+  canvas.style.width = `${canvasWidth}px`;
+  canvas.style.height = `${canvasHeight}px`;
+  document.body.appendChild(canvas);
+  copy.classList.add("is-particle-source");
+
+  const context = canvas.getContext("2d");
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  const startedAt = performance.now();
+  let animationFrame = 0;
+  let removed = false;
+
+  const remove = () => {
+    if (removed) return;
+    removed = true;
+    cancelAnimationFrame(animationFrame);
+    canvas.remove();
+  };
+
+  const draw = (now) => {
+    const elapsed = now - startedAt;
+    context.clearRect(0, 0, canvasWidth, canvasHeight);
+    particles.forEach((particle) => {
+      const age = Math.max(0, elapsed - particle.delay);
+      const progress = Math.min(1, age / 700);
+      const travel = progress * (1.1 - .1 * progress);
+      const x = burstPadding + particle.x + particle.vx * travel;
+      const y = burstPadding + particle.y + particle.vy * travel + 56 * progress * progress;
+      const opacity = particle.alpha * Math.pow(1 - progress, 1.45);
+      if (opacity <= .01) return;
+      context.beginPath();
+      context.arc(x, y, particle.size * (1 - progress * .35), 0, Math.PI * 2);
+      context.fillStyle = `rgba(224, 240, 246, ${opacity})`;
+      context.fill();
+    });
+    if (elapsed < 820) animationFrame = requestAnimationFrame(draw);
+    else remove();
+  };
+
+  animationFrame = requestAnimationFrame(draw);
+  return remove;
+}
+
 function initHomeScrollStory() {
   if (homeScrollCleanup) homeScrollCleanup();
   homeScrollCleanup = null;
@@ -868,6 +1014,7 @@ function initHomeScrollStory() {
   let touchStartY = 0;
   let transitionTimer = 0;
   let entering = false;
+  let particleCleanup = null;
 
   const removeEntryListeners = () => {
     removeEventListener("wheel", onWheel);
@@ -888,19 +1035,21 @@ function initHomeScrollStory() {
     if (entering || !overture.classList.contains("is-ready")) return;
     entering = true;
     homeEntered = true;
+    if (scrollY > 0) scrollTo({ top: 0, behavior: "auto" });
     removeEntryListeners();
     revealJournal();
+    particleCleanup = burstOvertureCopy(copy);
     overture.classList.add("is-exiting");
     document.body.classList.add("home-transitioning");
     if (reducedMotion) finishEntry();
     else transitionTimer = setTimeout(finishEntry, 720);
   }
 
-  function onWheel(event) { if (event.deltaY > 6) enterHome(); }
+  function onWheel(event) { if (event.deltaY > 6) { event.preventDefault(); enterHome(); } }
   function onScroll() { if (scrollY > 4) enterHome(); }
   function onTouchStart(event) { touchStartY = event.touches[0]?.clientY || 0; }
-  function onTouchMove(event) { if (touchStartY - (event.touches[0]?.clientY || touchStartY) > 10) enterHome(); }
-  function onKeyDown(event) { if (["ArrowDown", "PageDown", "End", " "].includes(event.key)) enterHome(); }
+  function onTouchMove(event) { if (touchStartY - (event.touches[0]?.clientY || touchStartY) > 10) { event.preventDefault(); enterHome(); } }
+  function onKeyDown(event) { if (["ArrowDown", "PageDown", "End", " "].includes(event.key)) { event.preventDefault(); enterHome(); } }
 
   if (homeEntered) {
     revealJournal();
@@ -911,16 +1060,17 @@ function initHomeScrollStory() {
     const intro = document.querySelector("[data-rainy-intro]");
     if (intro && !intro.classList.contains("is-leaving")) addEventListener("rainy:intro-complete", revealOverture, { once: true });
     else requestAnimationFrame(revealOverture);
-    addEventListener("wheel", onWheel, { passive: true });
+    addEventListener("wheel", onWheel, { passive: false });
     addEventListener("scroll", onScroll, { passive: true });
     addEventListener("touchstart", onTouchStart, { passive: true });
-    addEventListener("touchmove", onTouchMove, { passive: true });
+    addEventListener("touchmove", onTouchMove, { passive: false });
     addEventListener("keydown", onKeyDown);
     scrollButton.addEventListener("click", enterHome);
   }
 
   homeScrollCleanup = () => {
     clearTimeout(transitionTimer);
+    particleCleanup?.();
     removeEventListener("rainy:intro-complete", revealOverture);
     removeEntryListeners();
     document.body.classList.remove("home-transitioning");
@@ -997,6 +1147,7 @@ function bindPageEvents() {
   document.querySelector("[data-copy-link]")?.addEventListener("click", copyCurrentLink);
   document.querySelector("[data-native-share]")?.addEventListener("click", shareCurrentPost);
   document.querySelector("[data-guest-form]")?.addEventListener("submit", submitGuestMessage);
+  if (getRoute() === "/guestbook") void loadGuestMessages();
 
   document.querySelectorAll("[data-player-main]").forEach((button) => button.addEventListener("click", togglePlayback));
   document.querySelectorAll("[data-player-prev]").forEach((button) => button.addEventListener("click", () => changeTrack(-1)));
@@ -1011,22 +1162,52 @@ function bindPageEvents() {
   });
 }
 
-function submitGuestMessage(event) {
+async function submitGuestMessage(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const data = new FormData(form);
   const name = String(data.get("name") || "").trim();
   const email = String(data.get("email") || "").trim();
   const text = String(data.get("message") || "").trim();
+  const website = String(data.get("website") || "").trim();
   if (!name || !text) { showToast("请填写称呼和留言内容"); return; }
   if (email && !/^\S+@\S+\.\S+$/.test(email)) { showToast("邮箱格式不正确"); return; }
+  if (website) { form.reset(); showToast("留言已经送到窗边"); return; }
+
+  const button = form.querySelector("button[type='submit']");
+  const originalLabel = button?.textContent || "留下这句话";
+  if (button) { button.disabled = true; button.textContent = "正在发布…"; }
+
+  if (window.RainyDB?.isConfigured() && window.RainyDB.createGuestMessage) {
+    try {
+      const created = await window.RainyDB.createGuestMessage({
+        name: name.slice(0, 16),
+        email: email.slice(0, 254),
+        message: text.slice(0, 240),
+      });
+      state.guestMessagesRemote = true;
+      state.guestMessagesLoaded = true;
+      if (created) state.guestMessages.unshift(normalizeGuestMessage(created));
+      else await loadGuestMessages();
+      updateGuestMessageView();
+      form.reset();
+      showToast("留言已发布，所有来访者都能看见");
+    } catch (error) {
+      console.warn("Rainy. 留言发布失败。", error);
+      showToast("留言暂时没有发布成功，请稍后再试");
+    } finally {
+      if (button) { button.disabled = false; button.textContent = originalLabel; }
+    }
+    return;
+  }
+
   const saved = getSavedMessages();
   saved.unshift({ name: name.slice(0, 16), text: text.slice(0, 240), date: new Date().toLocaleDateString("zh-CN") });
   localStorage.setItem("quiet-window-messages", JSON.stringify(saved));
-  document.querySelector("[data-message-list]").innerHTML = messagesTemplate();
-  document.querySelector("[data-message-count]").textContent = `${getMessages().length} 条`;
+  updateGuestMessageView();
   form.reset();
   showToast("留言已保存在这台设备上");
+  if (button) { button.disabled = false; button.textContent = originalLabel; }
 }
 
 function getSavedMessages() {

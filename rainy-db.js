@@ -130,6 +130,20 @@
     });
   }
 
+  async function listGuestMessages() {
+    return request("/rest/v1/guest_messages?select=id,name,message,created_at&order=created_at.desc&limit=100", { auth: false });
+  }
+
+  async function createGuestMessage(value) {
+    const rows = await request("/rest/v1/guest_messages?select=id,name,message,created_at", {
+      method: "POST",
+      auth: false,
+      headers: { Prefer: "return=representation" },
+      body: value,
+    });
+    return rows?.[0] || null;
+  }
+
   window.RainyDB = Object.freeze({
     isConfigured,
     useRemoteContent,
@@ -141,5 +155,7 @@
     upsert,
     update,
     remove,
+    listGuestMessages,
+    createGuestMessage,
   });
 })();
