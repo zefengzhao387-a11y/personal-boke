@@ -172,7 +172,7 @@ using (true);
 
 revoke all on public.guest_messages from anon, authenticated;
 grant select (id, name, message, created_at) on public.guest_messages to anon, authenticated;
-grant insert (name, email, message) on public.guest_messages to anon, authenticated;
+grant insert on public.guest_messages to anon, authenticated;
 grant select (email, status, updated_at), update, delete on public.guest_messages to authenticated;
 
 -- 运行成功后：在 Authentication -> Providers 中关闭公开注册，
