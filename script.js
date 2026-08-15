@@ -176,6 +176,7 @@ const weatherDynamics = { wind: 0, intensity: 1 };
 let animatedRoute = "";
 let homeScrollCleanup = null;
 let homeEntered = false;
+let signalSurfacesCleanup = null;
 
 const app = document.querySelector("#main-content");
 const searchDialog = document.querySelector("[data-search-dialog]");
@@ -1127,6 +1128,7 @@ function render() {
 
 function bindPageEvents() {
   initHomeScrollStory();
+  initSignalSurfaces();
   bindAdminEvents();
   document.querySelectorAll("[data-filter]").forEach((button) => button.addEventListener("click", () => {
     state.tag = button.dataset.filter;
@@ -1161,6 +1163,67 @@ function bindPageEvents() {
       seekBy(event.key === "ArrowRight" ? 5 : -5);
     });
   });
+}
+
+function initSignalSurfaces() {
+  signalSurfacesCleanup?.();
+  signalSurfacesCleanup = null;
+
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const surfaces = [...document.querySelectorAll(".panel, .main-panel, .article-paper")];
+  const listenerCleanups = [];
+
+  surfaces.forEach((surface) => {
+    surface.classList.add("is-signal-surface");
+    surface.style.setProperty("--signal-x", "50%");
+    surface.style.setProperty("--signal-y", "50%");
+    let animationFrame = 0;
+
+    const moveSpotlight = (event) => {
+      if (animationFrame) return;
+      animationFrame = requestAnimationFrame(() => {
+        const bounds = surface.getBoundingClientRect();
+        surface.style.setProperty("--signal-x", `${event.clientX - bounds.left}px`);
+        surface.style.setProperty("--signal-y", `${event.clientY - bounds.top}px`);
+        surface.style.setProperty("--signal-strength", "1");
+        animationFrame = 0;
+      });
+    };
+    const dimSpotlight = () => surface.style.setProperty("--signal-strength", "0");
+
+    surface.addEventListener("pointermove", moveSpotlight, { passive: true });
+    surface.addEventListener("pointerleave", dimSpotlight, { passive: true });
+    listenerCleanups.push(() => {
+      cancelAnimationFrame(animationFrame);
+      surface.removeEventListener("pointermove", moveSpotlight);
+      surface.removeEventListener("pointerleave", dimSpotlight);
+    });
+  });
+
+  const revealItems = [...document.querySelectorAll(".page-title > *, .section-head, .lead-story, .story-row, .note-card, .note-item, .archive-post, .about-copy section")];
+  revealItems.forEach((item, index) => {
+    item.classList.add("signal-reveal");
+    item.style.setProperty("--signal-delay", `${Math.min(index % 4, 3) * 55}ms`);
+  });
+
+  let observer = null;
+  if (!reducedMotion && "IntersectionObserver" in window) {
+    observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-signal-visible");
+        observer.unobserve(entry.target);
+      });
+    }, { threshold: .12, rootMargin: "0px 0px -5%" });
+    revealItems.forEach((item) => observer.observe(item));
+  } else {
+    revealItems.forEach((item) => item.classList.add("is-signal-visible"));
+  }
+
+  signalSurfacesCleanup = () => {
+    listenerCleanups.forEach((cleanup) => cleanup());
+    observer?.disconnect();
+  };
 }
 
 async function submitGuestMessage(event) {

@@ -986,16 +986,53 @@ main,
 
 .home-journal {
   position: relative;
+  isolation: isolate;
   min-height: 0;
   padding: 0 0 32px;
 }
 
 .home-journal::before {
-  display: none;
+  position: absolute;
+  z-index: 0;
+  inset: -90px 0 0;
+  background-image:
+    linear-gradient(rgba(181, 218, 231, .055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(181, 218, 231, .055) 1px, transparent 1px);
+  background-position: center top;
+  background-size: 48px 48px;
+  content: "";
+  mask-image: linear-gradient(to bottom, transparent, #000 14%, #000 72%, transparent);
+  opacity: .72;
+  pointer-events: none;
+}
+
+.home-journal::after {
+  position: absolute;
+  z-index: 0;
+  top: -52px;
+  right: 0;
+  left: 0;
+  height: 170px;
+  background: linear-gradient(to bottom, transparent, rgba(183, 228, 242, .1) 50%, rgba(220, 245, 252, .34) 51%, transparent 53%);
+  content: "";
+  filter: blur(.2px);
+  mix-blend-mode: screen;
+  opacity: .52;
+  pointer-events: none;
+  animation: journal-scan 8.5s cubic-bezier(.45,0,.55,1) infinite;
 }
 
 .home-portal {
+  position: relative;
+  z-index: 1;
   margin-top: -52px;
+}
+
+@keyframes journal-scan {
+  0%, 12% { opacity: 0; transform: translateY(-80px); }
+  22% { opacity: .52; }
+  72% { opacity: .18; }
+  88%, 100% { opacity: 0; transform: translateY(calc(100vh + 420px)); }
 }
 
 #main-content.home-entered .home-overture {
@@ -1053,6 +1090,51 @@ main,
   background: var(--surface);
   box-shadow: 0 26px 70px -48px var(--shadow), inset 0 1px 0 rgba(255,255,255,.06);
   backdrop-filter: blur(24px) saturate(116%);
+}
+
+.is-signal-surface {
+  --signal-strength: 0;
+  --signal-x: 50%;
+  --signal-y: 50%;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 260ms ease, box-shadow 320ms ease, transform 320ms var(--ease);
+}
+
+.is-signal-surface::after {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(360px circle at var(--signal-x) var(--signal-y), rgba(202, 237, 247, .13), transparent 47%),
+    radial-gradient(160px circle at var(--signal-x) var(--signal-y), rgba(230, 248, 252, .07), transparent 65%);
+  content: "";
+  mix-blend-mode: screen;
+  opacity: var(--signal-strength);
+  pointer-events: none;
+  transition: opacity 260ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .is-signal-surface:hover {
+    border-color: rgba(185, 224, 238, .28);
+    box-shadow: 0 30px 80px -48px rgba(4, 23, 34, .96), inset 0 1px 0 rgba(255,255,255,.09), 0 0 0 1px rgba(183, 224, 238, .035);
+    transform: translateY(-2px);
+  }
+}
+
+.signal-reveal {
+  opacity: 0;
+  clip-path: inset(0 0 18% 0);
+  transform: translateY(22px);
+  transition: opacity 720ms var(--signal-delay, 0ms) ease, transform 880ms var(--signal-delay, 0ms) var(--ease), clip-path 880ms var(--signal-delay, 0ms) var(--ease);
+}
+
+.signal-reveal.is-signal-visible {
+  opacity: 1;
+  clip-path: inset(0 0 0 0);
+  transform: translateY(0);
 }
 
 .panel {
@@ -1364,18 +1446,27 @@ main,
   align-items: center;
   gap: 9px;
   margin: 0 0 20px;
-  color: var(--amber);
+  background: linear-gradient(105deg, var(--amber) 26%, #f1dbc0 43%, var(--amber) 58%);
+  background-clip: text;
+  background-size: 240% 100%;
+  color: transparent;
   font-family: var(--mono);
   font-size: 8px;
   letter-spacing: .1em;
   text-transform: uppercase;
+  animation: signal-shine 7s ease-in-out infinite;
 }
 
 .welcome-eyebrow::before {
   width: 21px;
   height: 1px;
-  background: currentColor;
+  background: var(--amber);
   content: "";
+}
+
+@keyframes signal-shine {
+  0%, 34% { background-position: 120% 0; }
+  58%, 100% { background-position: -80% 0; }
 }
 
 .welcome-panel h2 {
@@ -2980,4 +3071,6 @@ select {
   html { scroll-behavior: auto; }
   *,*::before,*::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .rain-layer,.rain-canvas { display: none; }
+  .signal-reveal { opacity: 1; clip-path: none; transform: none; }
+  .home-journal::after { display: none; }
 }
