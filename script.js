@@ -1052,6 +1052,7 @@ function initHomeScrollStory() {
   function onKeyDown(event) { if (["ArrowDown", "PageDown", "End", " "].includes(event.key)) { event.preventDefault(); enterHome(); } }
 
   if (homeEntered) {
+    revealOverture();
     revealJournal();
     overture.classList.add("is-exiting");
     app.classList.add("home-entered");
