@@ -881,12 +881,17 @@ function initHomeScrollStory() {
 
   const updateOverture = () => {
     if (!overture.classList.contains("is-ready")) return;
-    const progress = Math.max(0, Math.min(1, scrollY / Math.max(1, overture.offsetHeight * .78)));
+    const progress = Math.max(0, Math.min(1, scrollY / Math.max(1, overture.offsetHeight * .3)));
     copy.style.opacity = String(1 - progress);
-    copy.style.transform = `translate3d(0, ${Math.round(progress * -64)}px, 0)`;
+    copy.style.filter = `blur(${(progress * 11).toFixed(1)}px)`;
   };
 
-  const scrollToJournal = () => journal.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+  const scrollToJournal = () => {
+    const portal = journal.querySelector(".home-portal");
+    const headerHeight = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--header")) || 72;
+    const target = scrollY + (portal?.getBoundingClientRect().top || journal.getBoundingClientRect().top) - headerHeight - 14;
+    scrollTo({ top: Math.max(0, target), behavior: reducedMotion ? "auto" : "smooth" });
+  };
   scrollButton.addEventListener("click", scrollToJournal);
   if (!reducedMotion) addEventListener("scroll", updateOverture, { passive: true });
 
