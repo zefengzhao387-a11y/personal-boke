@@ -140,7 +140,7 @@ const DEFAULT_MESSAGES = [
 ];
 
 const TRACKS = [
-  { title: "雨下一整晚", subtitle: "周杰伦 · 跨时代", src: "./assets/audio/rain-all-night.flac", duration: 0 },
+  { title: "雨下一整晚", subtitle: "周杰伦 · 跨时代", src: "./assets/audio/rain-all-night.ogg", duration: 0 },
   { title: "手语", subtitle: "周杰伦", src: "./assets/audio/jay-sign-language.ogg", duration: 0 },
   { title: "知了", subtitle: "陈默之", src: "./assets/audio/cicada.ogg", duration: 0 },
   { title: "会呼吸的痛", subtitle: "梁静茹", src: "./assets/audio/breathing-pain.ogg", duration: 0 },
@@ -158,6 +158,8 @@ const state = {
   playing: false,
   elapsed: 0,
   audio: null,
+  preloadedTracks: 0,
+  preloadStatus: "waiting",
   adminSection: "posts",
   adminPosts: [],
   adminNotes: [],
@@ -247,7 +249,7 @@ function playerPanel() {
   const track = TRACKS[state.trackIndex];
   return `
     <section class="panel player-panel${state.playing ? " is-playing" : ""}" data-player-panel>
-      <div class="player-top"><span class="panel-label">listening deck</span><span class="player-live"><i></i>HI-FI</span></div>
+      <div class="player-top"><span class="panel-label">listening deck</span><span class="player-live"><i></i><span data-preload-status>${preloadStatusLabel()}</span></span></div>
       <div class="vinyl-stage" aria-hidden="true">
         <div class="platter"><div class="vinyl"><div class="record-label"><span>RAINY.</span><b>R</b></div></div></div>
         <div class="tonearm-base"></div><div class="tonearm"><i></i></div><div class="deck-led"></div>
@@ -948,7 +950,7 @@ async function shareCurrentPost() {
 function ensureAudio() {
   if (state.audio) return state.audio;
   const audio = new Audio();
-  audio.preload = "metadata";
+  audio.preload = "auto";
   audio.volume = 0.72;
   audio.addEventListener("loadedmetadata", () => {
     if (Number.isFinite(audio.duration)) TRACKS[state.trackIndex].duration = audio.duration;
@@ -983,9 +985,56 @@ function loadCurrentTrack() {
   if (!state.audio) return;
   const track = TRACKS[state.trackIndex];
   state.elapsed = 0;
-  state.audio.src = track.src;
+  state.audio.src = track.cachedSrc || track.src;
   state.audio.load();
   updatePlayerUi();
+}
+
+let audioPreloadPromise = null;
+
+function preloadStatusLabel() {
+  if (state.preloadStatus === "ready") return `READY ${TRACKS.length}/${TRACKS.length}`;
+  if (state.preloadStatus === "partial") return `READY ${state.preloadedTracks}/${TRACKS.length}`;
+  if (state.preloadStatus === "on-demand") return "ON DEMAND";
+  if (state.preloadStatus === "loading") return `LOADING ${state.preloadedTracks}/${TRACKS.length}`;
+  return "HI-FI";
+}
+
+function preloadAllTracks() {
+  if (audioPreloadPromise) return audioPreloadPromise;
+
+  if (location.protocol === "file:" || navigator.connection?.saveData) {
+    state.preloadStatus = "on-demand";
+    updatePlayerUi();
+    return Promise.resolve();
+  }
+
+  state.preloadStatus = "loading";
+  updatePlayerUi();
+  let cursor = 0;
+  let failures = 0;
+
+  const worker = async () => {
+    while (cursor < TRACKS.length) {
+      const index = cursor++;
+      const track = TRACKS[index];
+      try {
+        const response = await fetch(track.src, { cache: "force-cache" });
+        if (!response.ok) throw new Error(`Audio request failed: ${response.status}`);
+        track.cachedSrc = URL.createObjectURL(await response.blob());
+        state.preloadedTracks += 1;
+      } catch {
+        failures += 1;
+      }
+      updatePlayerUi();
+    }
+  };
+
+  audioPreloadPromise = Promise.all([worker(), worker(), worker()]).then(() => {
+    state.preloadStatus = failures ? "partial" : "ready";
+    updatePlayerUi();
+  });
+  return audioPreloadPromise;
 }
 
 async function changeTrack(direction, autoplay = false) {
@@ -1032,6 +1081,7 @@ function updatePlayerUi() {
   document.querySelectorAll("[data-track-title]").forEach((node) => { node.textContent = track.title; });
   document.querySelectorAll("[data-track-subtitle]").forEach((node) => { node.textContent = track.subtitle; });
   document.querySelectorAll("[data-track-position]").forEach((node) => { node.textContent = `${String(state.trackIndex + 1).padStart(2, "0")} / ${String(TRACKS.length).padStart(2, "0")}`; });
+  document.querySelectorAll("[data-preload-status]").forEach((node) => { node.textContent = preloadStatusLabel(); });
   document.querySelectorAll("[data-player-current]").forEach((node) => { node.textContent = formatTime(elapsed); });
   document.querySelectorAll("[data-player-duration]").forEach((node) => { node.textContent = formatTime(duration); });
   const progress = duration ? Math.min(100, (elapsed / duration) * 100) : 0;
@@ -1361,6 +1411,17 @@ initMenu();
 initSearch();
 initMeta();
 render();
+
+const scheduleAudioPreload = () => {
+  const start = () => {
+    if ("requestIdleCallback" in window) requestIdleCallback(preloadAllTracks, { timeout: 1800 });
+    else setTimeout(preloadAllTracks, 350);
+  };
+  if (document.readyState === "complete") start();
+  else addEventListener("load", start, { once: true });
+};
+
+scheduleAudioPreload();
 
 const startVisualEffects = () => {
   initRainAnimation();
