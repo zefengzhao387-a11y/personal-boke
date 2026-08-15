@@ -1381,6 +1381,164 @@ function animateIn() {
   });
 }
 
+function initParticleIntro() {
+  const intro = document.querySelector("[data-rainy-intro]");
+  const canvas = document.querySelector("[data-rainy-intro-canvas]");
+  const enter = document.querySelector("[data-rainy-intro-enter]");
+  if (!intro || !canvas || !enter) return;
+
+  document.body.classList.add("intro-active");
+  const context = canvas.getContext("2d", { alpha: true });
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const pointer = { x: -1000, y: -1000, active: false };
+  let width = 0;
+  let height = 0;
+  let pixelRatio = 1;
+  let particles = [];
+  let animationFrame = 0;
+  let formed = false;
+  let leaving = false;
+  let leaveStarted = 0;
+  let started = performance.now();
+  let autoLeaveTimer = 0;
+
+  const easeOutQuart = (value) => 1 - ((1 - value) ** 4);
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+  const createParticles = () => {
+    const mask = document.createElement("canvas");
+    mask.width = Math.max(1, Math.round(width));
+    mask.height = Math.max(1, Math.round(height));
+    const maskContext = mask.getContext("2d", { willReadFrequently: true });
+    const fontSize = Math.min(width < 640 ? width * .245 : width * .17, 180);
+    const font = `800 ${Math.max(64, fontSize)}px Georgia, "Times New Roman", serif`;
+    maskContext.font = font;
+    maskContext.textAlign = "center";
+    maskContext.textBaseline = "middle";
+    maskContext.fillStyle = "#fff";
+    maskContext.fillText("Rainy.", width / 2, height * .46);
+
+    const pixels = maskContext.getImageData(0, 0, mask.width, mask.height).data;
+    const sample = width < 640 ? 5 : 4;
+    const scatter = Math.min(190, width * .38);
+    const nextParticles = [];
+
+    for (let y = 0; y < height; y += sample) {
+      for (let x = 0; x < width; x += sample) {
+        if (pixels[((Math.floor(y) * mask.width) + Math.floor(x)) * 4 + 3] < 150) continue;
+        const angle = Math.random() * Math.PI * 2;
+        const distance = scatter * (.35 + Math.random() * .9);
+        const blue = Math.random() < .085;
+        nextParticles.push({
+          x: x + Math.cos(angle) * distance,
+          y: y + Math.sin(angle) * distance + (Math.random() - .5) * 80,
+          tx: x,
+          ty: y,
+          delay: ((x / Math.max(1, width)) * 420) + Math.random() * 180,
+          phase: Math.random() * Math.PI * 2,
+          size: blue ? 2.55 : 2.05 + Math.random() * .35,
+          color: blue ? "87, 139, 210" : "238, 246, 249",
+        });
+      }
+    }
+    particles = nextParticles;
+  };
+
+  const resize = () => {
+    width = Math.max(320, innerWidth);
+    height = Math.max(480, innerHeight);
+    pixelRatio = Math.min(devicePixelRatio || 1, 1.5);
+    canvas.width = Math.round(width * pixelRatio);
+    canvas.height = Math.round(height * pixelRatio);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    createParticles();
+    if (!leaving) started = performance.now() - (formed ? 2600 : 0);
+  };
+
+  const draw = (time) => {
+    const elapsed = time - started;
+    const fall = leaving ? clamp((time - leaveStarted) / 850, 0, 1) : 0;
+    context.clearRect(0, 0, width, height);
+    context.shadowColor = "rgba(150, 203, 226, .34)";
+    context.shadowBlur = 7;
+
+    for (const particle of particles) {
+      const progress = reducedMotion ? 1 : easeOutQuart(clamp((elapsed - 180 - particle.delay) / 1600, 0, 1));
+      const drift = Math.sin(time * .0008 + particle.phase) * .8 * progress;
+      let x = particle.x + (particle.tx - particle.x) * progress + drift;
+      let y = particle.y + (particle.ty - particle.y) * progress + Math.cos(time * .00065 + particle.phase) * .55 * progress;
+
+      if (pointer.active && !leaving) {
+        const dx = x - pointer.x;
+        const dy = y - pointer.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance < 120 && distance > .1) {
+          const force = ((120 - distance) / 120) ** 2 * 42;
+          x += (dx / distance) * force;
+          y += (dy / distance) * force;
+        }
+      }
+
+      if (leaving) {
+        y += (fall ** 2) * (height * .72 + (particle.ty % 90));
+        x += Math.sin(particle.phase) * fall * 18;
+      }
+
+      const alpha = (leaving ? 1 - fall : clamp(progress * 1.2, 0, 1)) * (particle.color.startsWith("87") ? .92 : .78);
+      if (alpha <= .01) continue;
+      context.fillStyle = `rgba(${particle.color}, ${alpha})`;
+      context.beginPath();
+      context.arc(x, y, particle.size, 0, Math.PI * 2);
+      context.fill();
+    }
+
+    if (!formed && elapsed > (reducedMotion ? 0 : 2350)) {
+      formed = true;
+      intro.classList.add("is-formed");
+    }
+    if (!leaving || fall < 1) animationFrame = requestAnimationFrame(draw);
+  };
+
+  const onPointerMove = (event) => {
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+    pointer.active = true;
+  };
+  const onPointerLeave = () => { pointer.active = false; };
+
+  const leave = () => {
+    if (leaving) return;
+    leaving = true;
+    leaveStarted = performance.now();
+    clearTimeout(autoLeaveTimer);
+    intro.classList.add("is-leaving");
+    document.body.classList.remove("intro-active");
+    removeEventListener("pointermove", onPointerMove);
+    removeEventListener("pointerleave", onPointerLeave);
+    removeEventListener("resize", resize);
+    removeEventListener("keydown", onKeyDown);
+    setTimeout(() => {
+      cancelAnimationFrame(animationFrame);
+      intro.remove();
+    }, 900);
+  };
+
+  const onKeyDown = (event) => {
+    if (event.key === "Escape" || event.key === "Enter") leave();
+  };
+
+  addEventListener("pointermove", onPointerMove, { passive: true });
+  addEventListener("pointerleave", onPointerLeave, { passive: true });
+  addEventListener("resize", resize, { passive: true });
+  addEventListener("keydown", onKeyDown);
+  enter.addEventListener("click", leave);
+  resize();
+  animationFrame = requestAnimationFrame(draw);
+  autoLeaveTimer = setTimeout(leave, reducedMotion ? 1700 : 4800);
+}
+
 function showToast(message) {
   const toast = document.querySelector("[data-toast]");
   toast.textContent = message;
@@ -1410,6 +1568,7 @@ initHeaderScroll();
 initMenu();
 initSearch();
 initMeta();
+initParticleIntro();
 render();
 
 const scheduleAudioPreload = () => {
