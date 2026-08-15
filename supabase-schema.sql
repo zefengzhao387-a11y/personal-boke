@@ -127,9 +127,21 @@ create table if not exists public.guest_messages (
   updated_at timestamptz not null default now()
 );
 
+create or replace function public.set_guest_message_updated_at()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
 drop trigger if exists guest_messages_set_updated_at on public.guest_messages;
 create trigger guest_messages_set_updated_at before update on public.guest_messages
-for each row execute function public.set_updated_at();
+for each row execute function public.set_guest_message_updated_at();
 
 alter table public.guest_messages enable row level security;
 
