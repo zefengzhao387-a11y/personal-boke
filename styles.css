@@ -827,7 +827,7 @@ main,
 
 .home-overture {
   position: relative;
-  min-height: max(620px, 100svh);
+  min-height: 460px;
   overflow: hidden;
   color: #eef5f7;
 }
@@ -2828,7 +2828,7 @@ select {
   .menu-button { display: block; }
   .hero { min-height: 390px; }
   .hero-inner { padding-bottom: 74px; }
-  .home-overture { min-height: 100svh; }
+  .home-overture { min-height: 520px; }
   .home-overture-inner { padding-bottom: 86px; grid-template-columns: minmax(250px, .84fr) minmax(350px, 1.16fr); gap: 32px; }
   .home-overture-quote { padding-top: 54px; font-size: clamp(39px, 5.6vw, 54px); }
   .home-portal { margin-top: -36px; }
