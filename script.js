@@ -387,9 +387,14 @@ function homeTemplate() {
       <aside class="left-stack">${profilePanel()}${sideNav()}</aside>
       <div class="main-stack">
         <section class="main-panel welcome-panel">
-          <p class="welcome-eyebrow">写给偶然到访的人</p>
-          <h2>${SITE.headline}</h2>
-          <p>不定期随便写点什么——</p>
+          <div class="welcome-layout">
+            <div class="welcome-copy">
+              <p class="welcome-eyebrow">写给偶然到访的人</p>
+              <h2>${SITE.headline}</h2>
+              <p>不定期随便写点什么——</p>
+            </div>
+            <aside class="welcome-issue" aria-hidden="true"><span>rain letter</span><strong>08</strong><small>2026 · 雾蓝刊</small></aside>
+          </div>
         </section>
         ${techNewsPanel()}
         <section class="main-panel editorial-section">
