@@ -1745,7 +1745,6 @@ function initParticleIntro() {
   let leaving = false;
   let leaveStarted = 0;
   let started = performance.now();
-  let autoLeaveTimer = 0;
 
   const easeOutQuart = (value) => 1 - ((1 - value) ** 4);
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -1857,7 +1856,6 @@ function initParticleIntro() {
     if (leaving) return;
     leaving = true;
     leaveStarted = performance.now();
-    clearTimeout(autoLeaveTimer);
     intro.classList.add("is-leaving");
     document.body.classList.remove("intro-active");
     removeEventListener("pointermove", onPointerMove);
@@ -1872,7 +1870,7 @@ function initParticleIntro() {
   };
 
   const onKeyDown = (event) => {
-    if (event.key === "Escape" || event.key === "Enter") leave();
+    if (event.key === "Enter") leave();
   };
 
   addEventListener("pointermove", onPointerMove, { passive: true });
@@ -1882,7 +1880,6 @@ function initParticleIntro() {
   enter.addEventListener("click", leave);
   resize();
   animationFrame = requestAnimationFrame(draw);
-  autoLeaveTimer = setTimeout(leave, reducedMotion ? 1700 : 4800);
 }
 
 function showToast(message) {
