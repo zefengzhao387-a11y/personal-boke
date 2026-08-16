@@ -170,6 +170,10 @@ const state = {
   guestMessagesLoaded: false,
   guestMessagesLoading: false,
   guestMessagesRemote: false,
+  techNews: [],
+  techNewsLoaded: false,
+  techNewsLoading: false,
+  techNewsError: "",
 };
 
 const weatherDynamics = { wind: 0, intensity: 1 };
@@ -294,6 +298,70 @@ function rightStack() {
   return `<aside class="right-stack">${playerPanel()}${todayPanel()}${tagPanel()}</aside>`;
 }
 
+function formatNewsTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "刚刚更新";
+  const diff = Date.now() - date.getTime();
+  const hours = Math.max(0, Math.floor(diff / 3600000));
+  if (hours < 1) return "刚刚更新";
+  if (hours < 24) return `${hours} 小时前`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? "昨天" : `${days} 天前`;
+}
+
+function techNewsItemsTemplate() {
+  if (state.techNewsLoading && !state.techNews.length) {
+    return `<div class="tech-news-loading" aria-label="正在接收今日技术新闻"><i></i><span>正在接收今日技术讯号</span></div>`;
+  }
+  if (state.techNewsError && !state.techNews.length) {
+    return `<div class="tech-news-empty"><strong>今日讯号暂未接通</strong><span>稍后刷新页面，会再次尝试获取。</span><button type="button" data-news-retry>重新接收</button></div>`;
+  }
+  return state.techNews.map((item, index) => `
+    <a class="tech-news-item${index === 0 ? " is-lead" : ""}" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">
+      <span class="tech-news-rank">${String(index + 1).padStart(2, "0")}</span>
+      <span class="tech-news-copy"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.source)} · ${formatNewsTime(item.publishedAt)}${item.score ? ` · 热度 ${item.score}` : ""}</small></span>
+      <span class="tech-news-arrow" aria-hidden="true">↗</span>
+    </a>`).join("");
+}
+
+function techNewsPanel() {
+  const date = new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(new Date()).replace("/", ".");
+  return `
+    <section class="main-panel tech-news-panel" data-tech-news-panel>
+      <header class="tech-news-head">
+        <div><span class="tech-news-live"><i></i>daily signal</span><h2>今日技术热榜</h2></div>
+        <time data-tech-news-date>${date}</time>
+      </header>
+      <div class="tech-news-list" data-tech-news-list aria-live="polite">${techNewsItemsTemplate()}</div>
+      <footer><span>自动更新 · Hacker News / 开源中国</span><span>只做索引，内容归原作者所有</span></footer>
+    </section>`;
+}
+
+async function loadTechNews(force = false) {
+  if (state.techNewsLoading || (state.techNewsLoaded && !force)) return;
+  state.techNewsLoading = true;
+  state.techNewsError = "";
+  const list = document.querySelector("[data-tech-news-list]");
+  if (list) list.innerHTML = techNewsItemsTemplate();
+  try {
+    const response = await fetch("./api/tech-news", { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`技术新闻请求失败（${response.status}）`);
+    const payload = await response.json();
+    state.techNews = Array.isArray(payload.items) ? payload.items.slice(0, 7) : [];
+    if (!state.techNews.length) throw new Error("今日暂无可用技术新闻");
+    state.techNewsLoaded = true;
+  } catch (error) {
+    state.techNewsError = error?.message || "技术新闻暂时无法获取";
+  } finally {
+    state.techNewsLoading = false;
+    const currentList = document.querySelector("[data-tech-news-list]");
+    if (currentList) {
+      currentList.innerHTML = techNewsItemsTemplate();
+      currentList.querySelector("[data-news-retry]")?.addEventListener("click", () => void loadTechNews(true));
+    }
+  }
+}
+
 function homeTemplate() {
   const [lead, ...rest] = POSTS;
   return `
@@ -323,6 +391,7 @@ function homeTemplate() {
           <h2>${SITE.headline}</h2>
           <p>不定期随便写点什么——</p>
         </section>
+        ${techNewsPanel()}
         <section class="main-panel editorial-section">
           <div class="section-head"><h2>最近写下</h2><a href="#/writing">全部文章</a></div>
           <a class="lead-story" href="#/post/${lead.slug}">
@@ -1151,6 +1220,7 @@ function bindPageEvents() {
   document.querySelector("[data-native-share]")?.addEventListener("click", shareCurrentPost);
   document.querySelector("[data-guest-form]")?.addEventListener("submit", submitGuestMessage);
   if (getRoute() === "/guestbook") void loadGuestMessages();
+  if (getRoute() === "/") void loadTechNews();
 
   document.querySelectorAll("[data-player-main]").forEach((button) => button.addEventListener("click", togglePlayback));
   document.querySelectorAll("[data-player-prev]").forEach((button) => button.addEventListener("click", () => changeTrack(-1)));
@@ -1200,7 +1270,7 @@ function initSignalSurfaces() {
     });
   });
 
-  const revealItems = [...document.querySelectorAll(".page-title > *, .section-head, .lead-story, .story-row, .note-card, .note-item, .archive-post, .about-copy section")];
+  const revealItems = [...document.querySelectorAll(".page-title > *, .section-head, .lead-story, .story-row, .note-card, .note-item, .archive-post, .about-copy section, .tech-news-item")];
   revealItems.forEach((item, index) => {
     item.classList.add("signal-reveal");
     item.style.setProperty("--signal-delay", `${Math.min(index % 4, 3) * 55}ms`);
