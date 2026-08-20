@@ -1,3 +1,4 @@
 .npm-cache/
 .vercel/
-
+.typora-publisher/
+.env.typora.local

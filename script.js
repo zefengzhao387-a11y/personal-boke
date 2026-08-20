@@ -571,10 +571,18 @@ function articleTemplate(post) {
 }
 
 function inlineMarkdown(value) {
+  const code = [];
   return escapeHtml(value)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/`([^`]+)`/g, (_, content) => {
+      code.push(`<code>${content}</code>`);
+      return `\u0000CODE${code.length - 1}\u0000`;
+    })
+    .replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+|\.?\.?\/[^\s)]+)(?:\s+&quot;[^&]*&quot;)?\)/g, '<img src="$2" alt="$1" loading="lazy" decoding="async">')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|\.?\.?\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    .replace(/~~([^~]+)~~/g, "<del>$1</del>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/\u0000CODE(\d+)\u0000/g, (_, index) => code[Number(index)]);
 }
 
 function headingId(value, index) {
@@ -590,7 +598,9 @@ function markdownToArticle(markdown) {
   const html = [];
   const toc = [];
   let paragraph = [];
-  let listOpen = false;
+  let listTag = "";
+  let codeFence = null;
+  let codeLines = [];
 
   const flushParagraph = () => {
     if (!paragraph.length) return;
@@ -598,15 +608,30 @@ function markdownToArticle(markdown) {
     paragraph = [];
   };
   const closeList = () => {
-    if (listOpen) html.push("</ul>");
-    listOpen = false;
+    if (listTag) html.push(`</${listTag}>`);
+    listTag = "";
   };
 
   lines.forEach((line) => {
+    const fence = line.match(/^```\s*([\w-]*)\s*$/);
+    if (fence) {
+      flushParagraph(); closeList();
+      if (codeFence !== null) {
+        const language = codeFence ? ` class="language-${escapeHtml(codeFence)}"` : "";
+        html.push(`<pre><code${language}>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+        codeFence = null; codeLines = [];
+      } else {
+        codeFence = fence[1] || "";
+      }
+      return;
+    }
+    if (codeFence !== null) { codeLines.push(line); return; }
     const h2 = line.match(/^##\s+(.+)$/);
     const h3 = line.match(/^###\s+(.+)$/);
-    const item = line.match(/^[-*]\s+(.+)$/);
+    const item = line.match(/^[-*+]\s+(.+)$/);
+    const orderedItem = line.match(/^\d+[.)]\s+(.+)$/);
     const quote = line.match(/^>\s?(.+)$/);
+    const image = line.match(/^!\[[^\]]*\]\([^)]+\)\s*$/);
     if (h2) {
       flushParagraph(); closeList();
       const id = headingId(h2[1], toc.length);
@@ -615,19 +640,27 @@ function markdownToArticle(markdown) {
     } else if (h3) {
       flushParagraph(); closeList();
       html.push(`<h3>${inlineMarkdown(h3[1])}</h3>`);
-    } else if (item) {
+    } else if (item || orderedItem) {
       flushParagraph();
-      if (!listOpen) { html.push("<ul>"); listOpen = true; }
-      html.push(`<li>${inlineMarkdown(item[1])}</li>`);
+      const nextTag = orderedItem ? "ol" : "ul";
+      if (listTag && listTag !== nextTag) closeList();
+      if (!listTag) { html.push(`<${nextTag}>`); listTag = nextTag; }
+      html.push(`<li>${inlineMarkdown((item || orderedItem)[1])}</li>`);
     } else if (quote) {
       flushParagraph(); closeList();
       html.push(`<blockquote><p>${inlineMarkdown(quote[1])}</p></blockquote>`);
+    } else if (image) {
+      flushParagraph(); closeList();
+      html.push(`<figure>${inlineMarkdown(line)}</figure>`);
+    } else if (/^([-*_])(?:\s*\1){2,}\s*$/.test(line)) {
+      flushParagraph(); closeList(); html.push("<hr>");
     } else if (!line.trim()) {
       flushParagraph(); closeList();
     } else {
       closeList(); paragraph.push(line.trim());
     }
   });
+  if (codeFence !== null) html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
   flushParagraph(); closeList();
   return { html: html.join("\n"), toc };
 }

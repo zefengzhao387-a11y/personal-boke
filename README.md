@@ -48,6 +48,39 @@ http://127.0.0.1:8000/#/admin
 
 未填写 Supabase 配置或 `useRemoteContent` 仍为 `false` 时，公开博客继续读取 `script.js` 内的本地内容，不会出现空白页。
 
+## 用 Typora 一键发布
+
+现在可以把 Typora 当作博客的本地写作客户端。文章保存为普通 Markdown 文件，通过 Typora 的“自定义命令”直接写入 Supabase；公开文章刷新博客即可出现，不需要重新部署 Vercel。本地图片会上传到 `blog-assets`，原文中的图片路径也会自动替换。
+
+### 第一次设置
+
+1. 在 Supabase SQL Editor 中重新运行一次 `supabase-schema.sql`，创建文章图片仓库。
+2. 在 PowerShell 中运行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\tools\setup-typora.ps1"
+```
+
+3. 输入博客后台的作者邮箱和密码。密码使用 Windows 当前账户加密，保存在本机 `%LOCALAPPDATA%\RainyBlogPublisher`，不会进入 Git 仓库。
+
+### 添加 Typora 导出菜单
+
+在 Typora 打开“文件 → 偏好设置 → 导出”，点击 `+`，选择“自定义命令”，名称填写 `发布到 Rainy.`。关闭保存文件对话框，并填写下面的命令（把项目路径换成这台电脑上的实际绝对路径）：
+
+```text
+powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Users\35294\Documents\Codex\2026-08-15\ni-ha\outputs\recovered-personal-blog\tools\publish-typora.ps1" "${currentPath}"
+```
+
+建议开启“导出后显示命令输出”。以后写完并保存文章，选择“文件 → 导出 → 发布到 Rainy.”即可。也可以在命令行直接测试：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\tools\publish-typora.ps1" ".\content\Typora发布示例.md"
+```
+
+只想检查文章信息而不联网发布时，可运行 `node .\tools\publish-typora.mjs ".\content\Typora发布示例.md" --check`。
+
+文章开头使用 YAML 信息区；`status: draft` 保存为后台草稿，改成 `status: published` 才会在公开博客出现。`slug` 建议使用稳定的英文链接名；不填写时，发布器会根据文件名或标题生成一个稳定链接。完整范例见 `content/Typora发布示例.md`。
+
 标题、品牌和主要导航使用本机已安装的华文新魏，获得稍粗且略带书写装饰的效果；长正文使用华文楷体，时间、日期和播放器进度继续使用等宽字体。
 
 ## 页面与功能

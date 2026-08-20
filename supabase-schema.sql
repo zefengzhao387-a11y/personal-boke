@@ -175,5 +175,44 @@ grant select (id, name, message, created_at) on public.guest_messages to anon, a
 grant insert on public.guest_messages to anon, authenticated;
 grant select (email, status, updated_at), update, delete on public.guest_messages to authenticated;
 
+-- Typora 发布器使用的公开图片仓库。图片可公开读取，只有登录作者可以写入。
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'blog-assets',
+  'blog-assets',
+  true,
+  10485760,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "blog assets are public" on storage.objects;
+create policy "blog assets are public"
+on storage.objects for select
+to anon, authenticated
+using (bucket_id = 'blog-assets');
+
+drop policy if exists "author inserts blog assets" on storage.objects;
+create policy "author inserts blog assets"
+on storage.objects for insert
+to authenticated
+with check (bucket_id = 'blog-assets');
+
+drop policy if exists "author updates blog assets" on storage.objects;
+create policy "author updates blog assets"
+on storage.objects for update
+to authenticated
+using (bucket_id = 'blog-assets')
+with check (bucket_id = 'blog-assets');
+
+drop policy if exists "author deletes blog assets" on storage.objects;
+create policy "author deletes blog assets"
+on storage.objects for delete
+to authenticated
+using (bucket_id = 'blog-assets');
+
 -- 运行成功后：在 Authentication -> Providers 中关闭公开注册，
 -- 然后只在 Dashboard 中手动创建你自己的作者账号。
