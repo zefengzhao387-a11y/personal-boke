@@ -1,4 +1,4 @@
-param()
+﻿param()
 
 $ErrorActionPreference = 'Stop'
 $credentialDir = Join-Path $env:LOCALAPPDATA 'RainyBlogPublisher'
