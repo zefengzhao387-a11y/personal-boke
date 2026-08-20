@@ -1114,7 +1114,7 @@ function initHomeScrollStory() {
   const journal = document.querySelector("[data-home-journal]");
   const scrollButton = document.querySelector("[data-home-scroll]");
   if (!overture || !copy || !journal || !scrollButton) {
-    app.classList.remove("home-entered");
+    app.classList.remove("home-entered", "home-returning");
     return;
   }
 
@@ -1162,12 +1162,13 @@ function initHomeScrollStory() {
   function onKeyDown(event) { if (["ArrowDown", "PageDown", "End", " "].includes(event.key)) { event.preventDefault(); enterHome(); } }
 
   if (homeEntered) {
+    app.classList.add("home-returning");
     revealOverture();
     revealJournal();
     overture.classList.add("is-exiting");
     app.classList.add("home-entered");
   } else {
-    app.classList.remove("home-entered");
+    app.classList.remove("home-entered", "home-returning");
     const intro = document.querySelector("[data-rainy-intro]");
     if (intro && !intro.classList.contains("is-leaving")) addEventListener("rainy:intro-complete", revealOverture, { once: true });
     else requestAnimationFrame(revealOverture);
@@ -1843,25 +1844,21 @@ function animateIn({ homeReturn = false } = {}) {
   if (document.querySelector("[data-home-overture]") && !homeReturn) return;
   if (window.gsap) {
     if (entranceAnimation) entranceAnimation.kill();
-    const homeIdentity = homeReturn ? document.querySelector(".home-identity") : null;
-    const homePanels = homeReturn ? document.querySelectorAll(".home-journal .home-portal > *") : [];
     const heroTopline = document.querySelector(".hero-topline");
     const heroTitle = document.querySelector(".hero h1");
     const heroDetails = document.querySelectorAll(".hero-summary, .hero-weather");
-    const panels = homeReturn ? [] : document.querySelectorAll(".main-panel, .left-stack > *, .right-stack > *, .article-paper");
+    const panels = document.querySelectorAll(".main-panel, .left-stack > *, .right-stack > *, .article-paper");
     entranceAnimation = gsap.timeline({
       defaults: { ease: "power3.out" },
       onComplete: () => { entranceAnimation = null; },
     });
     const entrance = entranceAnimation;
     entrance.addLabel("hero");
-    if (homeIdentity) entrance.fromTo(homeIdentity, { autoAlpha: 0, x: -20 }, { autoAlpha: 1, x: 0, duration: .72, clearProps: "transform,opacity,visibility" }, "hero");
-    if (homePanels.length) entrance.fromTo(homePanels, { autoAlpha: 0, y: 20 }, { autoAlpha: 1, y: 0, duration: .68, stagger: .07, clearProps: "transform,opacity,visibility" }, "hero+=.18");
     if (heroTopline) entrance.fromTo(heroTopline, { autoAlpha: 0, x: -18 }, { autoAlpha: 1, x: 0, duration: .7 }, "hero");
     if (heroTitle) entrance.fromTo(heroTitle, { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: .9 }, "hero+=.28");
     if (heroDetails.length) entrance.fromTo(heroDetails, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: .65, stagger: .08 }, "hero+=.62");
     if (panels.length) entrance.fromTo(panels, { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: .62, stagger: { each: .055, from: "start" }, clearProps: "transform,opacity,visibility" }, "hero+=.8");
-    if (homeIdentity || homePanels.length || heroTopline || heroTitle || heroDetails.length || panels.length) return;
+    if (heroTopline || heroTitle || heroDetails.length || panels.length) return;
   }
   document.querySelectorAll(".main-panel, .left-stack > *, .right-stack > *, .article-paper").forEach((node, index) => {
     node.animate([{ opacity: 0, transform: "translateY(14px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 520, delay: Math.min(index * 45, 240), easing: "cubic-bezier(.22,1,.36,1)", fill: "both" });

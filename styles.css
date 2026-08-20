@@ -3532,6 +3532,25 @@ body {
 /* Performance pass: keep the glass depth without repainting large blurred layers on every scroll frame. */
 .home-overture { transition: none; }
 
+/* Once the opening story is complete, home uses the same hero rhythm as every subpage. */
+.home-overture.is-exiting,
+#main-content.home-entered .home-overture {
+  height: 438px;
+  min-height: 438px;
+}
+
+.home-overture.is-exiting .home-overture-inner,
+#main-content.home-entered .home-overture-inner {
+  min-height: inherit;
+  padding: 82px 0 92px;
+  align-items: end;
+}
+
+.home-overture.is-exiting .home-identity,
+#main-content.home-entered .home-identity { padding-top: 0; }
+
+#main-content.home-returning .home-journal .home-portal > * { transition: none; }
+
 .panel,
 .main-panel,
 .article-paper,
@@ -3557,4 +3576,31 @@ body {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
+}
+
+@media (max-width: 940px) {
+  .home-overture.is-exiting,
+  #main-content.home-entered .home-overture {
+    height: 390px;
+    min-height: 390px;
+  }
+
+  .home-overture.is-exiting .home-overture-inner,
+  #main-content.home-entered .home-overture-inner { padding: 82px 0 74px; }
+}
+
+@media (max-width: 640px) {
+  .home-overture.is-exiting,
+  #main-content.home-entered .home-overture {
+    height: 350px;
+    min-height: 350px;
+  }
+
+  .home-overture.is-exiting .home-overture-inner,
+  #main-content.home-entered .home-overture-inner {
+    padding: 64px 4px 62px;
+    align-content: end;
+  }
+
+  .home-portal { margin-top: -36px; }
 }
