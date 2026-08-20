@@ -181,6 +181,8 @@ let animatedRoute = "";
 let homeScrollCleanup = null;
 let homeEntered = false;
 let signalSurfacesCleanup = null;
+let entranceAnimation = null;
+let readingProgressFrame = 0;
 
 const app = document.querySelector("#main-content");
 const searchDialog = document.querySelector("[data-search-dialog]");
@@ -1193,6 +1195,7 @@ function getRoute() {
 
 function render() {
   const route = getRoute();
+  const previousRoute = animatedRoute;
   let markup;
   let page = "home";
   let title = `${SITE.name} — ${SITE.author}的个人博客`;
@@ -1211,6 +1214,7 @@ function render() {
     else markup = notFoundTemplate();
   } else markup = notFoundTemplate();
 
+  cleanupPageEffects();
   app.innerHTML = markup;
   document.title = title;
   document.querySelectorAll("[data-nav]").forEach((link) => {
@@ -1227,10 +1231,21 @@ function render() {
   updateReadingProgress();
   if (route !== animatedRoute) {
     animatedRoute = route;
-    animateIn();
+    animateIn({ homeReturn: route === "/" && Boolean(previousRoute) });
   }
   if (selectedNote) requestAnimationFrame(() => document.querySelector(`#note-${CSS.escape(selectedNote)}`)?.scrollIntoView({ block: "center" }));
   if (route === "/admin" && window.RainyDB?.getSession() && !state.adminLoaded && !state.adminLoading) void loadAdminData();
+}
+
+function cleanupPageEffects() {
+  if (entranceAnimation) {
+    entranceAnimation.kill();
+    entranceAnimation = null;
+  }
+  homeScrollCleanup?.();
+  homeScrollCleanup = null;
+  signalSurfacesCleanup?.();
+  signalSurfacesCleanup = null;
 }
 
 function bindPageEvents() {
@@ -1278,6 +1293,7 @@ function initSignalSurfaces() {
   signalSurfacesCleanup = null;
 
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const canTrackPointer = matchMedia("(hover: hover) and (pointer: fine)").matches;
   const surfaces = [...document.querySelectorAll(".panel, .main-panel, .article-paper")];
   const listenerCleanups = [];
 
@@ -1286,23 +1302,31 @@ function initSignalSurfaces() {
     surface.style.setProperty("--signal-x", "50%");
     surface.style.setProperty("--signal-y", "50%");
     let animationFrame = 0;
+    let bounds = null;
+
+    const cacheBounds = () => { bounds = surface.getBoundingClientRect(); };
 
     const moveSpotlight = (event) => {
+      if (!canTrackPointer) return;
       if (animationFrame) return;
       animationFrame = requestAnimationFrame(() => {
-        const bounds = surface.getBoundingClientRect();
+        if (!bounds) cacheBounds();
         surface.style.setProperty("--signal-x", `${event.clientX - bounds.left}px`);
         surface.style.setProperty("--signal-y", `${event.clientY - bounds.top}px`);
         surface.style.setProperty("--signal-strength", "1");
         animationFrame = 0;
       });
     };
-    const dimSpotlight = () => surface.style.setProperty("--signal-strength", "0");
+    const dimSpotlight = () => { bounds = null; surface.style.setProperty("--signal-strength", "0"); };
 
-    surface.addEventListener("pointermove", moveSpotlight, { passive: true });
-    surface.addEventListener("pointerleave", dimSpotlight, { passive: true });
+    if (canTrackPointer) {
+      surface.addEventListener("pointerenter", cacheBounds, { passive: true });
+      surface.addEventListener("pointermove", moveSpotlight, { passive: true });
+      surface.addEventListener("pointerleave", dimSpotlight, { passive: true });
+    }
     listenerCleanups.push(() => {
       cancelAnimationFrame(animationFrame);
+      surface.removeEventListener("pointerenter", cacheBounds);
       surface.removeEventListener("pointermove", moveSpotlight);
       surface.removeEventListener("pointerleave", dimSpotlight);
     });
@@ -1473,7 +1497,7 @@ function preloadAllTracks() {
       try {
         const response = await fetch(track.src, { cache: "force-cache" });
         if (!response.ok) throw new Error(`Audio request failed: ${response.status}`);
-        track.cachedSrc = URL.createObjectURL(await response.blob());
+        await response.arrayBuffer();
         state.preloadedTracks += 1;
       } catch {
         failures += 1;
@@ -1482,7 +1506,8 @@ function preloadAllTracks() {
     }
   };
 
-  audioPreloadPromise = Promise.all([worker(), worker(), worker()]).then(() => {
+  const concurrency = navigator.connection?.effectiveType === "4g" ? 2 : 1;
+  audioPreloadPromise = Promise.all(Array.from({ length: concurrency }, worker)).then(() => {
     state.preloadStatus = failures ? "partial" : "ready";
     updatePlayerUi();
   });
@@ -1639,6 +1664,14 @@ function updateReadingProgress() {
   bar.style.transform = `scaleX(${max > 0 ? Math.min(scrollY / max, 1) : 0})`;
 }
 
+function scheduleReadingProgress() {
+  if (readingProgressFrame) return;
+  readingProgressFrame = requestAnimationFrame(() => {
+    readingProgressFrame = 0;
+    updateReadingProgress();
+  });
+}
+
 function initRainAnimation() {
   const canvas = document.querySelector("[data-rain-canvas]");
   if (!canvas) return;
@@ -1652,7 +1685,8 @@ function initRainAnimation() {
   let frame = 0;
   let previousTime = 0;
   let resizeFrame = 0;
-  const frameInterval = 1000 / 45;
+  const lowPowerDevice = innerWidth < 760 || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+  const frameInterval = 1000 / (lowPowerDevice ? 24 : 32);
 
   const makeDrop = (initial = false) => {
     const depth = Math.random();
@@ -1680,8 +1714,8 @@ function initRainAnimation() {
   });
 
   const rebuildRain = () => {
-    const dropCount = Math.min(96, Math.max(42, Math.round((width * height) / 24000)));
-    const trailCount = Math.min(7, Math.max(4, Math.round(width / 260)));
+    const dropCount = Math.min(lowPowerDevice ? 44 : 68, Math.max(28, Math.round((width * height) / 34000)));
+    const trailCount = Math.min(5, Math.max(3, Math.round(width / 360)));
     drops = Array.from({ length: dropCount }, () => makeDrop(true));
     glassTrails = Array.from({ length: trailCount }, () => makeGlassTrail(true));
   };
@@ -1689,7 +1723,7 @@ function initRainAnimation() {
   const resize = () => {
     width = Math.max(1, innerWidth);
     height = Math.max(1, innerHeight);
-    pixelRatio = Math.min(devicePixelRatio || 1, 1.25);
+    pixelRatio = Math.min(devicePixelRatio || 1, lowPowerDevice ? 1 : 1.1);
     canvas.width = Math.round(width * pixelRatio);
     canvas.height = Math.round(height * pixelRatio);
     canvas.style.width = `${width}px`;
@@ -1730,11 +1764,7 @@ function initRainAnimation() {
       if (trail.y - trail.length > height) Object.assign(trail, makeGlassTrail(false));
       const top = trail.y - trail.length;
       const bend = Math.sin(trail.phase + trail.y * .012) * trail.wobble;
-      const trailGradient = context.createLinearGradient(trail.x, top, trail.x, trail.y + 9);
-      trailGradient.addColorStop(0, `rgba(${rainColor},0)`);
-      trailGradient.addColorStop(.7, `rgba(${rainColor},${trail.alpha})`);
-      trailGradient.addColorStop(1, `rgba(${rainColor},${trail.alpha * 1.8})`);
-      context.strokeStyle = trailGradient;
+      context.strokeStyle = `rgba(${rainColor},${trail.alpha * 1.3})`;
       context.lineWidth = 1.05;
       context.beginPath();
       context.moveTo(trail.x, top);
@@ -1750,7 +1780,7 @@ function initRainAnimation() {
   };
 
   const start = () => {
-    if (frame || reducedMotion.matches || document.hidden) return;
+    if (frame || reducedMotion.matches || document.hidden || document.body.classList.contains("intro-active")) return;
     previousTime = 0;
     frame = requestAnimationFrame(draw);
   };
@@ -1768,7 +1798,9 @@ function initRainAnimation() {
       resize();
     });
   }, { passive: true });
-  document.addEventListener("visibilitychange", () => document.hidden ? stop() : start());
+  const handleVisibility = () => document.hidden ? stop() : start();
+  document.addEventListener("visibilitychange", handleVisibility);
+  addEventListener("rainy:intro-complete", start, { once: true });
   reducedMotion.addEventListener("change", () => reducedMotion.matches ? stop() : start());
   resize();
   start();
@@ -1806,28 +1838,30 @@ function initAmbientAnimation() {
   });
 }
 
-let entranceAnimation = null;
-
-function animateIn() {
+function animateIn({ homeReturn = false } = {}) {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  if (document.querySelector("[data-home-overture]")) return;
+  if (document.querySelector("[data-home-overture]") && !homeReturn) return;
   if (window.gsap) {
     if (entranceAnimation) entranceAnimation.kill();
+    const homeIdentity = homeReturn ? document.querySelector(".home-identity") : null;
+    const homePanels = homeReturn ? document.querySelectorAll(".home-journal .home-portal > *") : [];
     const heroTopline = document.querySelector(".hero-topline");
     const heroTitle = document.querySelector(".hero h1");
     const heroDetails = document.querySelectorAll(".hero-summary, .hero-weather");
-    const panels = document.querySelectorAll(".main-panel, .left-stack > *, .right-stack > *, .article-paper");
+    const panels = homeReturn ? [] : document.querySelectorAll(".main-panel, .left-stack > *, .right-stack > *, .article-paper");
     entranceAnimation = gsap.timeline({
       defaults: { ease: "power3.out" },
       onComplete: () => { entranceAnimation = null; },
     });
     const entrance = entranceAnimation;
     entrance.addLabel("hero");
+    if (homeIdentity) entrance.fromTo(homeIdentity, { autoAlpha: 0, x: -20 }, { autoAlpha: 1, x: 0, duration: .72, clearProps: "transform,opacity,visibility" }, "hero");
+    if (homePanels.length) entrance.fromTo(homePanels, { autoAlpha: 0, y: 20 }, { autoAlpha: 1, y: 0, duration: .68, stagger: .07, clearProps: "transform,opacity,visibility" }, "hero+=.18");
     if (heroTopline) entrance.fromTo(heroTopline, { autoAlpha: 0, x: -18 }, { autoAlpha: 1, x: 0, duration: .7 }, "hero");
     if (heroTitle) entrance.fromTo(heroTitle, { autoAlpha: 0, y: 26 }, { autoAlpha: 1, y: 0, duration: .9 }, "hero+=.28");
     if (heroDetails.length) entrance.fromTo(heroDetails, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: .65, stagger: .08 }, "hero+=.62");
     if (panels.length) entrance.fromTo(panels, { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: .62, stagger: { each: .055, from: "start" }, clearProps: "transform,opacity,visibility" }, "hero+=.8");
-    return;
+    if (homeIdentity || homePanels.length || heroTopline || heroTitle || heroDetails.length || panels.length) return;
   }
   document.querySelectorAll(".main-panel, .left-stack > *, .right-stack > *, .article-paper").forEach((node, index) => {
     node.animate([{ opacity: 0, transform: "translateY(14px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 520, delay: Math.min(index * 45, 240), easing: "cubic-bezier(.22,1,.36,1)", fill: "both" });
@@ -1853,6 +1887,8 @@ function initParticleIntro() {
   let leaving = false;
   let leaveStarted = 0;
   let started = performance.now();
+  let previousDrawTime = 0;
+  const introFrameInterval = 1000 / (innerWidth < 760 ? 24 : 32);
 
   const easeOutQuart = (value) => 1 - ((1 - value) ** 4);
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -1871,7 +1907,7 @@ function initParticleIntro() {
     maskContext.fillText("Rainy.", width / 2, height * .46);
 
     const pixels = maskContext.getImageData(0, 0, mask.width, mask.height).data;
-    const sample = width < 640 ? 5 : 4;
+    const sample = width < 640 ? 6 : 5;
     const scatter = Math.min(190, width * .38);
     const nextParticles = [];
 
@@ -1899,7 +1935,7 @@ function initParticleIntro() {
   const resize = () => {
     width = Math.max(320, innerWidth);
     height = Math.max(480, innerHeight);
-    pixelRatio = Math.min(devicePixelRatio || 1, 1.5);
+    pixelRatio = Math.min(devicePixelRatio || 1, 1.25);
     canvas.width = Math.round(width * pixelRatio);
     canvas.height = Math.round(height * pixelRatio);
     canvas.style.width = `${width}px`;
@@ -1910,11 +1946,16 @@ function initParticleIntro() {
   };
 
   const draw = (time) => {
+    if (!leaving && previousDrawTime && time - previousDrawTime < introFrameInterval) {
+      animationFrame = requestAnimationFrame(draw);
+      return;
+    }
+    previousDrawTime = time;
     const elapsed = time - started;
     const fall = leaving ? clamp((time - leaveStarted) / 850, 0, 1) : 0;
     context.clearRect(0, 0, width, height);
     context.shadowColor = "rgba(150, 203, 226, .34)";
-    context.shadowBlur = 7;
+    context.shadowBlur = 4;
 
     for (const particle of particles) {
       const progress = reducedMotion ? 1 : easeOutQuart(clamp((elapsed - 180 - particle.delay) / 1600, 0, 1));
@@ -2010,7 +2051,7 @@ function initMeta() {
 }
 
 addEventListener("hashchange", render);
-addEventListener("scroll", updateReadingProgress, { passive: true });
+addEventListener("scroll", scheduleReadingProgress, { passive: true });
 document.querySelectorAll("[data-player-toggle]").forEach((button) => button.addEventListener("click", togglePlayback));
 setInterval(updateClock, 30000);
 
@@ -2035,7 +2076,8 @@ scheduleAudioPreload();
 
 const startVisualEffects = () => {
   initRainAnimation();
-  initAmbientAnimation();
+  if (document.body.classList.contains("intro-active")) addEventListener("rainy:intro-complete", initAmbientAnimation, { once: true });
+  else initAmbientAnimation();
 };
 
 if ("requestIdleCallback" in window) requestIdleCallback(startVisualEffects, { timeout: 650 });
